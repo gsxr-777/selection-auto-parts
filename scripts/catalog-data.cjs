@@ -18,6 +18,20 @@ const part=z.discriminatedUnion('entity',[
  z.object({...base,entity:z.literal('part'),brandId:z.string().min(1),brand:z.string().min(1),number:z.string().min(1),categoryId:z.string(),variantId:z.literal('car:18953'),sequenceId:z.string().min(1),productId:z.string().min(1),attributes:z.array(attribute),conditions:z.array(z.object({general:z.array(attribute),alternatives:z.array(z.array(attribute)),information:z.array(z.string())})),oe:z.array(z.object({manufacturerId:z.string(),manufacturer:z.string(),number:z.string().min(1),additive:z.boolean(),information:z.string()})),crosses:z.array(z.object({type:z.enum(['replaces','replaced_by']),number:z.string(),brand:z.string(),sourceId:z.string().nullable()})),_query:z.string().optional(),_references:z.boolean().optional()}).strict()
 ]);
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
+const manifestSchema=z.object({version:z.literal(1),release:z.literal('2/2018'),country:z.literal('RUS'),locales:z.tuple([z.literal('en'),z.literal('ru')]),extractedAt:z.string().refine(v=>Number.isFinite(Date.parse(v)))}).strict();
+function loadReferenceManufacturers(directory){
+ const manifest=manifestSchema.parse(JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'))),maps=[],files=[];
+ for(const locale of manifest.locales){
+  const file=path.join(directory,`manufacturers-${locale}.jsonl`);
+  if(!fs.existsSync(file+'.complete')||fs.readFileSync(file+'.complete','utf8').trim()!==String(fs.statSync(file).size))throw new Error('Reference manufacturer export is incomplete');
+  const map=new Map();for(const row of readRows(file,z.object({id:z.string().min(1),label:z.string(),comparison:z.boolean()}).strict())){
+   if(map.has(row.id)&&map.get(row.id)!==row.comparison)throw new Error('Conflicting reference manufacturer flags '+row.id);
+   map.set(row.id,row.comparison);
+  }maps.push(map);files.push(file);
+ }
+ if(maps[0].size!==maps[1].size||[...maps[0]].some(([id,flag])=>maps[1].get(id)!==flag))throw new Error('Reference manufacturer locale mismatch');
+ return {manufacturers:maps[0],fileHash:hash(files.map(file=>hash(fs.readFileSync(file))).join('|')),extractedAt:manifest.extractedAt};
+}
 function normalizeNumber(value){return value.normalize('NFKC').toUpperCase().replace(/[\s.\-_/]/g,'');}
 function canonicalAttributes(attrs){
  const value=title=>attrs.find(a=>a.title===title)?.value||null;
@@ -84,9 +98,19 @@ function loadCatalog(directory,sample=false,vehiclesOnly=false,parentSample=fals
   const selected=new Set(),perRoot=new Map();for(const f of maps.fitment.values()){let c=maps.category.get(f.categoryId);while(c.parentId)c=maps.category.get(c.parentId);const count=perRoot.get(c.id)||0;if(count<3&&!selected.has(f.partId)){selected.add(f.partId);perRoot.set(c.id,count+1);}}
   maps.part=new Map([...maps.part].filter(([id])=>selected.has(id)));maps.fitment=new Map([...maps.fitment].filter(([,f])=>selected.has(f.partId)));
  }
- const manifest=z.object({version:z.literal(1),release:z.literal('2/2018'),country:z.literal('RUS'),locales:z.tuple([z.literal('en'),z.literal('ru')]),extractedAt:z.string().refine(v=>Number.isFinite(Date.parse(v)))}).strict().parse(JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8')));
+ const manifest=manifestSchema.parse(JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8')));
+ let referenceAudit=null;
+ if(!vehiclesOnly){
+  const {manufacturers,fileHash,extractedAt}=loadReferenceManufacturers(path.join(path.dirname(directory),'catalog-reference-export'));let checkedOe=0;
+  for(const p of maps.part.values())for(const reference of p.oe){
+   if(!manufacturers.has(reference.manufacturerId))throw new Error('Unknown reference manufacturer '+reference.manufacturerId);
+   if(manufacturers.get(reference.manufacturerId))throw new Error('Comparison number cannot be imported as OE: '+p.id);
+   checkedOe++;
+  }
+  referenceAudit={fileHash,extractedAt,manufacturerCount:manufacturers.size,checkedOe};
+ }
  if(!sample&&(maps.make.size!==596||maps.model.size!==13174||maps.variant.size!==75843))throw new Error('Full vehicle counts differ from the verified source census');
  const fileHash=hash(files.map(file=>hash(fs.readFileSync(file))).join('|'));
- return {maps,manifest,fileHash,counts:Object.fromEntries(Object.entries(maps).map(([key,value])=>[key,value.size]))};
+ return {maps,manifest,fileHash,referenceAudit,counts:Object.fromEntries(Object.entries(maps).map(([key,value])=>[key,value.size]))};
 }
 module.exports={loadCatalog,canonicalAttributes,normalizeNumber,hash};

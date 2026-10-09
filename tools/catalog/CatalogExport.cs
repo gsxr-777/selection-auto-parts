@@ -153,6 +153,7 @@ class CatalogExport {
   if(args.Length>0&&args[0]=="--metadata")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-metadata";
   if(args.Length>0&&args[0]=="--coverage")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-coverage";
   if(args.Length>0&&args[0]=="--parent-parts"){parentsOnly=true;output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-parent-export";}
+  if(args.Length>0&&args[0]=="--reference-manufacturers")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-reference-export";
   exportMutex=new System.Threading.Mutex(false,"selection-auto-parts-"+Path.GetFileName(output));
   if(!exportMutex.WaitOne(0,false))return 2;
   Directory.CreateDirectory(output);
@@ -170,6 +171,13 @@ class CatalogExport {
    if(!Convert.ToBoolean(Get(master,"IsSecurityOk")))throw new Exception("Reader security check rejected");
    foreach(var country in (IEnumerable)Call(master,"GetAllCountries"))if(Text(country,"IsoCode3")=="RUS"){Call(master,"SetDataCountry",country);Call(master,"SetLinkitemCountry",country);break;}
    var links=Create(dal,"LinkitemData",config);AssertInit(links,master);
+   if(args.Length>0&&args[0]=="--reference-manufacturers"){
+    if(Text(Get(master,"CurrentValidityParameter"),"CurrentQuarter")!="2/2018")throw new Exception("Unexpected source release");
+    File.WriteAllText(Path.Combine(output,"manifest.json"),json.Serialize(Row("version",1,"release","2/2018","country","RUS","locales",new string[]{"en","ru"},"extractedAt",DateTime.UtcNow.ToString("o"))));
+    foreach(string locale in new string[]{"en","ru"}){Locale(master,locale);int count=0;using(var writer=new StreamWriter(Path.Combine(output,"manufacturers-"+locale+".jsonl"))){foreach(var manufacturer in Items(Call(links,"GetAllManufacturers"))){Write(writer,Row("id",Text(manufacturer,"ID"),"label",Text(manufacturer,"Description"),"comparison",Get(manufacturer,"IsVGL")));count++;}}log.WriteLine("REFERENCE_MANUFACTURERS "+locale+" count="+count);}
+    foreach(string locale in new string[]{"en","ru"}){string file=Path.Combine(output,"manufacturers-"+locale+".jsonl");File.WriteAllText(file+".complete",new FileInfo(file).Length.ToString(CultureInfo.InvariantCulture));}
+    log.WriteLine("REFERENCE_MANUFACTURERS_COMPLETE");return 0;
+   }
    if(args.Length>0&&args[0]=="--coverage"){Coverage(types,dal,config,master,links,log);return 0;}
    if(args.Length>0&&args[0]=="--benchmark"){Benchmark(types,dal,config,master,links,log);Call(master,"Dispose");return 0;}
    if(args.Length>0&&(args[0]=="--parts"||args[0]=="--parent-parts")){if(Text(Get(master,"CurrentValidityParameter"),"CurrentQuarter")!="2/2018")throw new Exception("Unexpected source release");Parts(types,dal,config,master,links,log);return 0;}

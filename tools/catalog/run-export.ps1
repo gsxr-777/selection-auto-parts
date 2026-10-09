@@ -1,9 +1,10 @@
-param([ValidateSet('parts','parent-parts','vehicles')][string]$Mode='parts')
+param([ValidateSet('parts','parent-parts','vehicles','reference-manufacturers')][string]$Mode='parts')
 $ErrorActionPreference='Stop'
 $root='\\VBOXSVR\1\777\laravel\selection-auto-parts'
 $destination='catalog-export'
 $helperName='CatalogExport'
 if($Mode -eq 'parent-parts') { $destination='catalog-parent-export'; $helperName='CatalogParentExport' }
+if($Mode -eq 'reference-manufacturers') { $destination='catalog-reference-export'; $helperName='CatalogReferenceExport' }
 $work=Join-Path ($root+'\.cache') $destination
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $compiled=Join-Path ($root+'\.cache') ($helperName+'.exe')

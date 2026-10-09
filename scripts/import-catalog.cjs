@@ -14,13 +14,13 @@ async function upsert(client,table,rows){
 }
 async function run(){
  const args=process.argv.slice(2),sample=args.includes('--sample');const envFile=args.includes('--production')?'.env.production.local':'.env';
- const {maps,manifest,fileHash,counts}=loadCatalog(path.resolve('.cache/catalog-export'),sample,args.includes('--vehicles-only'),args.includes('--parent-sample'));
- if(args.includes('--validate')){console.log({mode:sample?'sample':'full',counts,fileHash});return;}
+ const {maps,manifest,fileHash,counts,referenceAudit}=loadCatalog(path.resolve('.cache/catalog-export'),sample,args.includes('--vehicles-only'),args.includes('--parent-sample'));
+ if(args.includes('--validate')){console.log({mode:sample?'sample':'full',counts,fileHash,referenceAudit});return;}
  const env=dotenv.parse(fs.readFileSync(envFile));const client=new Client({connectionString:env.DATABASE_URL_UNPOOLED||env.DATABASE_URL});await client.connect();
  const batchId='catalog-2018q2-'+(sample?'sample-':'full-')+fileHash.slice(0,16);
  try{await client.query('BEGIN');
   await upsert(client,'catalog_sources',[{id:'local-catalog-2018q2',name:'TecDoc desktop BDF',sourceVersion:manifest.release,licenseNotes:'Project owner confirmed extraction and web publication permission on 2026-10-09. Source files remain private.',createdAt:'2026-10-09T00:00:00Z'}]);
-  await upsert(client,'import_batches',[{id:batchId,sourceId:'local-catalog-2018q2',fileHash,country:manifest.country,locales:manifest.locales,extractedAt:manifest.extractedAt,importedAt:new Date().toISOString(),counts}]);
+  await upsert(client,'import_batches',[{id:batchId,sourceId:'local-catalog-2018q2',fileHash,country:manifest.country,locales:manifest.locales,extractedAt:manifest.extractedAt,importedAt:new Date().toISOString(),counts:{...counts,referenceAudit}}]);
   await upsert(client,'vehicle_makes',[...maps.make.values()].map(r=>({id:r.id,sourceId:r.id,labels:r.labels,batchId})));
   await upsert(client,'vehicle_models',[...maps.model.values()].map(r=>({id:r.id,sourceId:r.sourceId,kind:r.kind,makeId:r.makeId,labels:r.labels,productionFrom:r.from,productionTo:r.to,partial:!r.labels.en&&!r.labels.ru,batchId})));
   await upsert(client,'vehicle_variants',[...maps.variant.values()].map(r=>({id:r.id,sourceId:r.sourceId,modelId:r.modelId,labels:r.labels,productionFrom:r.from,productionTo:r.to,...canonicalAttributes(r.attributes.en),attributes:r.attributes,batchId})));

@@ -19,11 +19,13 @@ it('requires parents, bounds pages and favorites lookup at API boundaries',()=>{
 });
 it('preserves full references across repeated fitments and rejects unfinished exports',()=>{
  const workspace=fileURLToPath(new URL('../../../',import.meta.url)),cache=path.join(workspace,'.cache');fs.mkdirSync(cache,{recursive:true});
- const directory=fs.mkdtempSync(path.join(cache,'catalog-test-')),exportDir=path.join(directory,'catalog-export'),parentDir=path.join(directory,'catalog-parent-export');fs.mkdirSync(exportDir);fs.mkdirSync(parentDir);
+ const directory=fs.mkdtempSync(path.join(cache,'catalog-test-')),exportDir=path.join(directory,'catalog-export'),parentDir=path.join(directory,'catalog-parent-export'),referenceDir=path.join(directory,'catalog-reference-export');fs.mkdirSync(exportDir);fs.mkdirSync(parentDir);fs.mkdirSync(referenceDir);
  const write=(file:string,rows:unknown[],complete=false)=>{fs.writeFileSync(file,rows.map(row=>JSON.stringify(row)).join('\n')+(rows.length?'\n':''));if(complete)fs.writeFileSync(file+'.complete',String(fs.statSync(file).size));};
  try{
   fs.writeFileSync(path.join(exportDir,'manifest.json'),JSON.stringify({version:1,release:'2/2018',country:'RUS',locales:['en','ru'],extractedAt:'2026-10-09T00:00:00Z'}));
+  fs.copyFileSync(path.join(exportDir,'manifest.json'),path.join(referenceDir,'manifest.json'));
   for(const locale of ['en','ru']){
+   write(path.join(referenceDir,`manufacturers-${locale}.jsonl`),[{id:'fixture-oe',label:'Fixture OE',comparison:false}],true);
    write(path.join(exportDir,`vehicles-${locale}.jsonl`),[{entity:'make',id:'36',label:'FORD'},{entity:'model',id:'car:5454',sourceId:'5454',makeId:'36',kind:'car',label:'FOCUS II (DB_)',from:null,to:null},{entity:'variant',id:'car:18953',sourceId:'18953',modelId:'car:5454',label:'1.6',from:'2005-04-01',to:'2012-09-30',attributes:[{id:'fixture-power',title:'Power',value:'74 kW'}]}]);
    const part={entity:'part',id:'fixture-part',brandId:'fixture-brand',brand:'Fixture brand',number:'FIXTURE-1',label:'Fixture piston',categoryId:'fixture-category',variantId:'car:18953',sequenceId:'1',productId:'fixture-product',attributes:[],conditions:[],oe:[{manufacturerId:'fixture-oe',manufacturer:'Fixture OE',number:'FIXTURE-OE',additive:false,information:locale}],crosses:[{type:'replaces',number:'FIXTURE-OLD',brand:'Fixture brand',sourceId:null}]};
    write(path.join(exportDir,`parts-${locale}.jsonl`),[{entity:'category',id:'fixture-category',sourceId:'fixture-category',parentId:null,label:'Fixture engine',state:'fixture'},part,{...part,sequenceId:'2',oe:[],crosses:[],_references:false}],true);
@@ -31,6 +33,9 @@ it('preserves full references across repeated fitments and rejects unfinished ex
   }
   const result=loadCatalog(exportDir,true);expect(result.counts).toMatchObject({part:1,fitment:2});
   const part=result.maps.part.get('fixture-part');expect(part.oe).toHaveLength(1);expect(part.crosses).toHaveLength(1);expect(part.oeTranslations.ru[0].information).toBe('ru');
+  expect(result.referenceAudit).toMatchObject({manufacturerCount:1,checkedOe:1});
+  for(const locale of ['en','ru'])write(path.join(referenceDir,`manufacturers-${locale}.jsonl`),[{id:'fixture-oe',label:'Fixture comparison',comparison:true}],true);
+  expect(()=>loadCatalog(exportDir,true)).toThrow('Comparison number cannot be imported as OE');
   fs.unlinkSync(path.join(exportDir,'parts-ru.jsonl.complete'));expect(()=>loadCatalog(exportDir,true)).toThrow('Source pass is incomplete');
  }finally{
   if(!directory.startsWith(path.join(cache,'catalog-test-'))||path.relative(workspace,directory).startsWith('..'))throw new Error('Unsafe fixture cleanup');

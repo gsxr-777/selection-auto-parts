@@ -6,6 +6,12 @@ const requireDb=createRequire(path.resolve('packages/db/package.json'));const {C
   const {rows:[focus]}=await db.query('SELECT id, "modelId", "powerKw", fuel, body, transmission FROM vehicle_variants WHERE id=$1',['car:18953']);
   if(!focus||focus.powerKw!==74||focus.modelId!=='car:5454'||focus.fuel!=='petrol'||focus.body!=='sedan'||focus.transmission!==null)throw new Error('Focus mismatch');
   if(!counts.parts||!counts.categories||!counts.fitments)throw new Error('Missing part data');
+  if(process.argv.includes('--full')){
+   const expected={makes:596,car_models:11631,motorcycle_models:1543,car_variants:68339,motorcycle_variants:7504,categories:1152,parts:11305,fitments:26571,oe:733224,replacements:682};
+   for(const [key,value] of Object.entries(expected))if(counts[key]!==value)throw new Error('Full import count mismatch: '+key);
+   const {rows:[batch]}=await db.query(`SELECT counts FROM import_batches WHERE id=$1`,['catalog-2018q2-full-2eb226b1ceba5293']);
+   if(batch?.counts.referenceAudit?.checkedOe!==733224||batch.counts.referenceAudit.manufacturerCount!==3507||!batch.counts.referenceAudit.fileHash)throw new Error('Missing reference classification audit');
+  }
   const {rows:[invalid]}=await db.query(`SELECT count(*)::int AS total FROM part_fitments WHERE "variantId"<>$1`,['car:18953']);if(invalid.total)throw new Error('Unexpected vehicle fitment');
   const {rows:[blank]}=await db.query(`SELECT count(*)::int AS total FROM vehicle_models WHERE NOT partial AND coalesce(labels->>'ru', '')='' AND coalesce(labels->>'en', '')=''`);if(blank.total)throw new Error('Unmarked empty labels');
   console.log(name,counts,'Focus validated; no unrelated fitment or unmarked empty label.');
