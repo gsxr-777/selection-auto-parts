@@ -1,12 +1,12 @@
 import {PrismaPg} from '@prisma/adapter-pg';
 import {PrismaClient} from './generated/client';
 import type {Prisma} from './generated/client';
-import {localizedLabel,emptySelection,type Locale,type VehicleModel,type SelectionQuery,type Selection,type PartResults,type ReferencesQuery,type ReferencesResult} from '@selection/core';
+import {localizedLabel,defaultLocale,emptySelection,type Locale,type VehicleModel,type SelectionQuery,type Selection,type PartResults,type ReferencesQuery,type ReferencesResult} from '@selection/core';
 export function createDatabase(url:string){return new PrismaClient({adapter:new PrismaPg({connectionString:url,max:3,connectionTimeoutMillis:5000})});}
 const label=(labels:Prisma.JsonValue,locale:Locale)=>localizedLabel(labels as Partial<Record<Locale,string>>,locale,(labels as Record<string,string>).en||'');
 type SourceAttribute={title:string;value:string};
 type SourceConditions={label?:string;attributes:SourceAttribute[];conditions:{general:SourceAttribute[];alternatives:SourceAttribute[][];information:string[]}[]};
-const fitmentLocale=(value:Prisma.JsonValue,locale:Locale)=>{const values=value as Record<string,SourceConditions>;return values[locale]||values.en||{attributes:[],conditions:[]};};
+const fitmentLocale=(value:Prisma.JsonValue,locale:Locale)=>{const values=value as Record<string,SourceConditions>;return values[locale]||values[defaultLocale]||values.en||{attributes:[],conditions:[]};};
 type ModelQuery={locale:Locale;makeId?:string;kind?:'car'|'motorcycle';ids?:string[]};
 export interface VehicleCatalogRepository {
  models(input:ModelQuery):Promise<VehicleModel[]>;
