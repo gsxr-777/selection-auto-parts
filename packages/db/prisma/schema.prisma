@@ -5,12 +5,157 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-// Infrastructure placeholder only. Real catalog schema follows source reconnaissance.
 model CatalogSource {
   id String @id
   name String
   sourceVersion String?
   licenseNotes String
   createdAt DateTime @default(now()) @db.Timestamptz(3)
+  batches ImportBatch[]
   @@map("catalog_sources")
+}
+
+model ImportBatch {
+  id String @id
+  sourceId String
+  source CatalogSource @relation(fields:[sourceId],references:[id])
+  fileHash String
+  country String
+  locales Json
+  extractedAt DateTime @db.Timestamptz(3)
+  importedAt DateTime @default(now()) @db.Timestamptz(3)
+  counts Json
+  makes VehicleMake[]
+  models VehicleModel[]
+  variants VehicleVariant[]
+  categories PartCategory[]
+  brands PartBrand[]
+  parts Part[]
+  @@map("import_batches")
+}
+model VehicleMake {
+  id String @id
+  sourceId String @unique
+  labels Json
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  models VehicleModel[]
+  @@map("vehicle_makes")
+}
+model VehicleModel {
+  id String @id
+  sourceId String
+  kind String
+  makeId String
+  make VehicleMake @relation(fields:[makeId],references:[id])
+  labels Json
+  productionFrom DateTime? @db.Date
+  productionTo DateTime? @db.Date
+  partial Boolean @default(false)
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  variants VehicleVariant[]
+  @@unique([kind,sourceId])
+  @@index([makeId,kind])
+  @@map("vehicle_models")
+}
+model VehicleVariant {
+  id String @id
+  sourceId String
+  modelId String
+  model VehicleModel @relation(fields:[modelId],references:[id])
+  labels Json
+  productionFrom DateTime? @db.Date
+  productionTo DateTime? @db.Date
+  fuel String?
+  body String?
+  transmission String?
+  powerKw Int?
+  displacementCm3 Int?
+  engineCode String?
+  attributes Json
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  fitments PartFitment[]
+  @@index([modelId,fuel,body,transmission])
+  @@map("vehicle_variants")
+}
+model PartCategory {
+  id String @id
+  sourceId String
+  parentId String?
+  parent PartCategory? @relation("CategoryTree",fields:[parentId],references:[id])
+  children PartCategory[] @relation("CategoryTree")
+  labels Json
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  fitments PartFitment[]
+  @@index([parentId])
+  @@map("part_categories")
+}
+model PartBrand {
+  id String @id
+  sourceId String @unique
+  label String
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  parts Part[]
+  @@map("part_brands")
+}
+model Part {
+  id String @id
+  sourceId String @unique
+  brandId String
+  brand PartBrand @relation(fields:[brandId],references:[id])
+  number String
+  normalizedNumber String
+  labels Json
+  attributes Json
+  batchId String
+  batch ImportBatch @relation(fields:[batchId],references:[id])
+  fitments PartFitment[]
+  oeNumbers OeReference[]
+  crosses PartCross[]
+  @@unique([brandId,number])
+  @@index([normalizedNumber])
+  @@map("parts")
+}
+model PartFitment {
+  id String @id
+  partId String
+  part Part @relation(fields:[partId],references:[id])
+  variantId String
+  variant VehicleVariant @relation(fields:[variantId],references:[id])
+  categoryId String
+  category PartCategory @relation(fields:[categoryId],references:[id])
+  attributes Json
+  @@index([variantId,categoryId,partId])
+  @@map("part_fitments")
+}
+model OeReference {
+  id String @id
+  partId String
+  part Part @relation(fields:[partId],references:[id])
+  manufacturerId String
+  manufacturer String
+  number String
+  normalizedNumber String
+  additive Boolean
+  information String
+  informationLabels Json @default("{}")
+  position Int @default(0)
+  @@index([normalizedNumber])
+  @@index([partId])
+  @@map("oe_references")
+}
+model PartCross {
+  id String @id
+  partId String
+  part Part @relation(fields:[partId],references:[id])
+  targetNumber String
+  targetBrand String
+  targetSourceId String?
+  relationType String
+  @@index([partId])
+  @@map("part_crosses")
 }

@@ -14,7 +14,7 @@ A future mobile application should reuse the same backend API and domain contrac
 ## 2. Non-negotiable engineering rules
 1. Inspect the existing repository before changing files. Preserve working conventions and report the detected stack.
 2. Do not invent catalog data, VIN decoding results, fitment, cross-references, prices, stock, or source licensing rights.
-3. TecDoc data may only be imported/used after checking the applicable license and permitted use. Keep source attribution and import provenance.
+3. Keep source attribution and import provenance internally. On 2026-10-09 the project owner confirmed permission to extract the installed TecDoc catalog and publish its data, authorizing the import. Record this as the owner's confirmation, not an independent contract review. Remove TecDoc mentions from the application interface; never remove internal provenance.
 4. All UI strings must be localized. No hard-coded user-facing strings in components, validation messages, metadata, or navigation.
 5. Russian (`ru`) and English (`en`) are required at launch. Adding a locale must not require rewriting components or database schema.
 6. Keep internal IDs and catalog identifiers language-neutral. Localize labels separately from stable identifiers.
@@ -212,7 +212,7 @@ For each phase:
 - No compatibility claims are generated from sample/mock data in production mode.
 
 ## 14. Implementation phases and agent workflow
-### Phase 0A — Deploy first and provision empty PostgreSQL (current authorized scope)
+### Phase 0A — Deploy first and provision empty PostgreSQL (completed infrastructure milestone)
 - Inspect the reference project and the GitHub/Vercel authentication before scaffolding.
 - Create the pnpm workspace and CI; publish a bilingual grayscale glass foundation, theme/language switches, honest empty catalog states, and favorite-model storage infrastructure.
 - Create isolated local and cloud databases/roles with no catalog rows. Keep secrets ignored and server-only. Do not run seed or invent vehicle models.
@@ -240,8 +240,13 @@ For each phase:
 - Add translation completeness checks and tests.
 
 ### Phase 2 — TecDok source reconnaissance, schema and import prototype
-- The VM is running Windows 7 (32-bit), Guest Additions 5.2.8, NAT guest address 10.0.2.15. VBoxManage management access is verified; guest filesystem authentication must be established independently.
+- Current authorized delivery (2026-10-09): import all passenger-car and motorbike models/types in RU/EN after validating the Focus sample; import all available parts groups and linked articles for Ford Focus II Saloon (DB_) 1.6, 74 kW, 04.2005–09.2012, source type 18953. No parts photos, prices, stock or VIN data.
+- Use `tools/catalog/CatalogExport.cs` inside the VM and `scripts/import-catalog.cjs` for transactional, repeatable local/cloud import. Exports stay ignored under `.cache/catalog-export`; hash and source context are recorded in import_batches.
+- Preserve typed replacement relations and full linkage conditions/alternative blocks. Shared OE numbers do not establish universal interchangeability.
+- The VM is running Windows 7 (32-bit), Guest Additions 5.2.8, NAT guest address 10.0.2.15. VBoxManage management and file reads through the logged-in desktop session are verified. Shared folder `1` maps host `C:/1` to guest `\\VBOXSVR\1`. Guestcontrol login as gsx without a password remains restricted; the extraction tool instead uses the active session and the installed BDF reader.
 - Inspect the actual export/files and permitted use before selecting source IDs, fields or writing an importer. Treat VM name TecDok and catalog product TecDoc separately.
+- Source reconnaissance confirmed the installed BDF reader (`TMDVD.DAL.BDF` 1.3.3.0) reports catalog release 2/2018. A full read enumerated 11,631 passenger-car model groups / 68,339 types and 1,543 motorbike groups / 7,504 types. One CHERY group (source ID 11438) has an empty label. The owner's subsequent import/publication confirmation is recorded in `docs/catalog-import.md`; the earlier feasibility report describes the state before that confirmation.
+- Initialize source language and country before reading labels, preserve both contexts in provenance, and classify vehicles using the typed source collections rather than IModel flags. Preserve unnamed records as partial; do not invent labels or infer current production from a missing end date in the 2018 snapshot.
 - Use a local/offline extraction process; Vercel must not depend on direct access to the workstation/VM. Record source version, original IDs, language and provenance.
 - Finalize schema against actual available source fields.
 - Import a small representative sample idempotently.
@@ -249,11 +254,15 @@ For each phase:
 - Do not import the full catalog until sample validation succeeds.
 
 ### Phase 3 — Vehicle selector and source-backed favorites
+- First card: disabled name/part-number search with localized explanation, vehicle kind, searchable make/model, fuel (including hybrid/electric), body, transmission and precise variant, followed by the source-backed parts hierarchy. Changing a parent clears descendants and results; state is shareable via URL.
+- Second card: selected model, favorite star to its right, then the selected group's parts with original OE references before aftermarket brand/number and explicit replacement relations. Keep saved models reachable from the first card.
 - Build dependent searchable selectors and URL state.
 - Connect favorite model add/remove controls to real imported records, restoring the selection using stable IDs.
 - Implement loading/error/empty states and unit/E2E tests.
 
 ### Phase 4 — Part search and detail pages
+- Search engine is deferred by the owner; do not enable the search input until implemented. This delivery provides paginated, precise-variant/group results only.
+- Do not import photos. Future client-side internet image lookup by brand + part number (Google Images) is a separate task; keep origin links and do not treat search results as verified catalog images.
 - Add PostgreSQL-backed exact and text search, filters, pagination, part pages, OE references, cross-references, and fitment display.
 
 ### Phase 5 — VIN provider integration
