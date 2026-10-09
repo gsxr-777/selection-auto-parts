@@ -5,6 +5,7 @@ $destination='catalog-export'
 $helperName='CatalogExport'
 if($Mode -eq 'parent-parts') { $destination='catalog-parent-export'; $helperName='CatalogParentExport' }
 $work=Join-Path ($root+'\.cache') $destination
+New-Item -ItemType Directory -Force -Path $work | Out-Null
 $compiled=Join-Path ($root+'\.cache') ($helperName+'.exe')
 if(Get-Process -Name ('selection-auto-parts-'+$helperName) -ErrorAction SilentlyContinue) { throw 'This export helper is already running; wait for it to exit before restarting.' }
 $compiler='C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe'
