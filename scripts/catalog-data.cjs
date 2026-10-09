@@ -15,7 +15,7 @@ const vehicle=z.discriminatedUnion('entity',[
 ]);
 const part=z.discriminatedUnion('entity',[
  z.object({...base,entity:z.literal('category'),sourceId:z.string(),parentId:z.string().nullable(),state:z.string()}).strict(),
- z.object({...base,entity:z.literal('part'),brandId:z.string().min(1),brand:z.string().min(1),number:z.string().min(1),categoryId:z.string(),variantId:z.literal('car:18953'),sequenceId:z.string().min(1),productId:z.string().min(1),attributes:z.array(attribute),conditions:z.array(z.object({general:z.array(attribute),alternatives:z.array(z.array(attribute)),information:z.array(z.string())})),oe:z.array(z.object({manufacturerId:z.string(),manufacturer:z.string(),number:z.string().min(1),additive:z.boolean(),information:z.string()})),crosses:z.array(z.object({type:z.enum(['replaces','replaced_by']),number:z.string(),brand:z.string(),sourceId:z.string().nullable()})),_query:z.string().optional()}).strict()
+ z.object({...base,entity:z.literal('part'),brandId:z.string().min(1),brand:z.string().min(1),number:z.string().min(1),categoryId:z.string(),variantId:z.literal('car:18953'),sequenceId:z.string().min(1),productId:z.string().min(1),attributes:z.array(attribute),conditions:z.array(z.object({general:z.array(attribute),alternatives:z.array(z.array(attribute)),information:z.array(z.string())})),oe:z.array(z.object({manufacturerId:z.string(),manufacturer:z.string(),number:z.string().min(1),additive:z.boolean(),information:z.string()})),crosses:z.array(z.object({type:z.enum(['replaces','replaced_by']),number:z.string(),brand:z.string(),sourceId:z.string().nullable()})),_query:z.string().optional(),_references:z.boolean().optional()}).strict()
 ]);
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 function normalizeNumber(value){return value.normalize('NFKC').toUpperCase().replace(/[\s.\-_/]/g,'');}
@@ -55,12 +55,15 @@ function loadCatalog(directory,sample=false,vehiclesOnly=false,parentSample=fals
   if(vehiclesOnly)continue;
   const parentFile=path.join(path.dirname(directory),'catalog-parent-export',`parts-${locale}.jsonl`);
   const partFiles=parentSample?[parentFile]:[path.join(directory,`parts-${locale}.jsonl`),parentFile];
-  for(const partsFile of partFiles){files.push(partsFile);
+  for(const partsFile of partFiles){
+   const complete=partsFile+'.complete';
+   if(!fs.existsSync(complete)||!fs.existsSync(partsFile)||fs.readFileSync(complete,'utf8').trim()!==String(fs.statSync(partsFile).size))throw new Error('Source pass is incomplete: '+path.basename(path.dirname(partsFile))+'/'+path.basename(partsFile));
+   files.push(partsFile);
   for(const row of readRows(partsFile,part)){
    if(row.entity==='category'){
     let entry=maps.category.get(row.id);if(!entry){entry={...row,labels:{}};maps.category.set(row.id,entry);}if(entry.parentId!==row.parentId)throw new Error('Category hierarchy mismatch '+row.id);entry.labels[locale]=row.label;
    }else{
-    let entry=maps.part.get(row.id);if(!entry){entry={...row,labels:{},attributes:{},oeTranslations:{}};maps.part.set(row.id,entry);}entry.labels[locale]=row.label;entry.attributes[locale]=row.attributes;entry.oeTranslations[locale]=row.oe;
+    let entry=maps.part.get(row.id);if(!entry){entry={...row,labels:{},attributes:{},oeTranslations:{}};maps.part.set(row.id,entry);}entry.labels[locale]=row.label;entry.attributes[locale]=row.attributes;if(row._references!==false){entry.oeTranslations[locale]=row.oe;if(locale==='en'){entry.oe=row.oe;entry.crosses=row.crosses;}}
     const id=hash(JSON.stringify([row.variantId,row.id,row.categoryId,row.productId,row.sequenceId]));
     let fitment=maps.fitment.get(id);if(!fitment){fitment={id,partId:row.id,categoryId:row.categoryId,variantId:row.variantId,attributes:{sourceSequenceId:row.sequenceId,sourceProductId:row.productId}};maps.fitment.set(id,fitment);}fitment.attributes[locale]={label:row.label,attributes:row.attributes,conditions:row.conditions};
    }
@@ -73,7 +76,7 @@ function loadCatalog(directory,sample=false,vehiclesOnly=false,parentSample=fals
   if(category.parentId&&!maps.category.has(category.parentId))throw new Error('Missing parent '+category.id);
   if(!('en' in category.labels)||!('ru' in category.labels))throw new Error('Incomplete category locales '+category.id);
  }
- for(const p of maps.part.values())if(!('en' in p.labels)||!('ru' in p.labels))throw new Error('Incomplete part locales '+p.id);
+ for(const p of maps.part.values())if(!('en' in p.labels)||!('ru' in p.labels)||!('en' in p.oeTranslations)||!('ru' in p.oeTranslations))throw new Error('Incomplete part locales or references '+p.id);
  for(const fitment of maps.fitment.values())if(!maps.part.has(fitment.partId)||!maps.category.has(fitment.categoryId)||!maps.variant.has(fitment.variantId)||!fitment.attributes.en||!fitment.attributes.ru)throw new Error('Incomplete fitment '+fitment.id);
  const focus=maps.variant.get('car:18953');if(!focus||canonicalAttributes(focus.attributes.en).powerKw!==74||focus.from!=='2005-04-01'||focus.to!=='2012-09-30'||!maps.model.get(focus.modelId).labels.en.includes('DB_'))throw new Error('Focus identity mismatch');
  if(sample){

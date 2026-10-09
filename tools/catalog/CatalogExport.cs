@@ -118,6 +118,7 @@ class CatalogExport {
     var result=Generic(linkage,"GetArticleListV2",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),focus,node,subset,false);
     foreach(var article in (IEnumerable)Get(result,"Articles")){
      object supplier=Get(article,"Supplier");string partId=Text(supplier,"ID")+":"+Text(article,"DataSupplierArticleNumber");seen.Add(partId);fitments++;
+     bool includeReferences=!oeCache.ContainsKey(partId);
      List<object> oe;if(!oeCache.TryGetValue(partId,out oe)){oe=new List<object>();foreach(var reference in (IEnumerable)Call(articleDal,"GetArticleOENumbers",article))oe.Add(Row("manufacturerId",Text(Get(reference,"Manufacturer"),"ID"),"manufacturer",Text(Get(reference,"Manufacturer"),"Description"),"number",Text(reference,"OENbr"),"additive",Get(reference,"IsAdditive"),"information",Text(reference,"ReferenceInformation")));oeCache.Add(partId,oe);}
      List<object> crosses;if(!crossCache.TryGetValue(partId,out crosses)){crosses=new List<object>();foreach(string property in new string[]{"ReplaceNumbers","NewNumbers"}){var references=Get(article,property) as IEnumerable;if(references!=null)foreach(var reference in references){var target=Get(reference,"Article");crosses.Add(Row("type",property=="ReplaceNumbers"?"replaces":"replaced_by","number",Text(reference,property=="ReplaceNumbers"?"ReplaceNbr":"NewNbr"),"brand",Text(Get(target,"Supplier"),"Description"),"sourceId",target==null?null:Text(Get(target,"Supplier"),"ID")+":"+Text(target,"DataSupplierArticleNumber")));}}crossCache.Add(partId,crosses);}
      if(Text(Get(article,"CurrentLinkitem"),"ID")!="18953")throw new Exception("Unexpected source vehicle linkage: "+partId);
@@ -130,10 +131,13 @@ class CatalogExport {
       var information=new List<string>();foreach(var info in Items(Get(detail,"LinkageInformations")))information.Add(Text(info,"InformationText"));
       conditions.Add(Row("general",general,"alternatives",blocks,"information",information));
      }
-     var exportedRow=Row("entity","part","id",partId,"brandId",Text(supplier,"ID"),"brand",Text(supplier,"Description"),"number",Text(article,"DataSupplierArticleNumber"),"label",Text(article,"NormalizedDescription"),"categoryId",id,"variantId","car:18953","sequenceId",Text(article,"SequenceID"),"productId",Text(product,"ID"),"attributes",Attributes(article),"conditions",conditions,"oe",oe,"crosses",crosses,"_query",queryId);Write(writer,exportedRow);
+     var exportedRow=Row("entity","part","id",partId,"brandId",Text(supplier,"ID"),"brand",Text(supplier,"Description"),"number",Text(article,"DataSupplierArticleNumber"),"label",Text(article,"NormalizedDescription"),"categoryId",id,"variantId","car:18953","sequenceId",Text(article,"SequenceID"),"productId",Text(product,"ID"),"attributes",Attributes(article),"conditions",conditions,"oe",includeReferences?oe:new List<object>(),"crosses",includeReferences?crosses:new List<object>(),"_query",queryId,"_references",includeReferences);Write(writer,exportedRow);
     }
     writer.Flush();File.AppendAllText(Path.Combine(output,"queries-"+locale+".txt"),queryId+Environment.NewLine);completedQueries.Add(queryId);workQueries++;
     long managed=GC.GetTotalMemory(false),memory=System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64;
+    // Serialization creates large temporary strings. Measure retained memory before
+    // restarting the reader, otherwise transient allocations trigger needless reloads.
+    if(managed>650L*1048576||memory>1000L*1048576){managed=GC.GetTotalMemory(true);memory=System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64;}
     log.WriteLine("QUERY "+locale+" "+id+" offset="+offset+" fitments="+fitments+" managedMB="+(managed/1048576)+" privateMB="+(memory/1048576));
     if(workQueries>=30||managed>650L*1048576||memory>1000L*1048576){SaveResume(locale,Path.Combine(output,"parts-"+locale+".jsonl"),fitments-localeBase,seen);throw new ContinueExport();}
     }
