@@ -1,0 +1,40 @@
+import {test,expect} from '@playwright/test';
+
+for(const locale of ['ru','en'])test(`complete dropdowns support scrolling, keyboard and search (${locale})`,async({page,context})=>{
+ const count=125;
+ const makes=Array.from({length:count},(_,i)=>({id:`fixture-make-${i}`,label:`Make ${String(i).padStart(3,'0')}`}));
+ const make=makes.at(-1)!;
+ const models=Array.from({length:count},(_,i)=>({id:`car:fixture-model-${i}`,sourceId:`fixture-${i}`,makeId:make.id,makeLabel:make.label,kind:'car',label:`Model ${String(i).padStart(3,'0')}`}));
+ const model=models.at(-1)!;
+ const variants=Array.from({length:count},(_,i)=>({id:`car:fixture-variant-${i}`,modelId:model.id,label:`Variant ${String(i).padStart(3,'0')}`,productionFrom:null,productionTo:null,powerKw:null,engineCode:null,fuel:null,body:null,transmission:null}));
+ const categories=Array.from({length:count},(_,i)=>({id:`fixture-category-${i}`,label:`Group ${String(i).padStart(3,'0')}`,parentId:null,hasParts:false}));
+ await context.route('**/api/v1/**',route=>{
+  const url=new URL(route.request().url());
+  if(url.pathname.endsWith('/selection'))return route.fulfill({json:{makes,models:url.searchParams.get('makeId')===make.id?models:[],fuels:[],bodies:[],transmissions:[],variants:url.searchParams.get('modelId')===model.id?variants:[],totalVariants:url.searchParams.get('modelId')===model.id?count:0}});
+  if(url.pathname.endsWith('/categories'))return route.fulfill({json:{status:'ready',data:categories}});
+  return route.fulfill({status:404,json:{error:{code:'NOT_FOUND'}}});
+ });
+ await page.setViewportSize(locale==='ru'?{width:390,height:844}:{width:1440,height:1000});
+ await page.goto(`/${locale}`);
+ const makeInput=page.getByRole('combobox',{name:locale==='ru'?'Марка':'Make',exact:true});
+ await expect(makeInput).toBeEnabled();await makeInput.click();
+ const list=page.getByRole('listbox');await expect(list.getByRole('option')).toHaveCount(count);
+ await list.getByRole('option',{name:make.label,exact:true}).scrollIntoViewIfNeeded();
+ await list.getByRole('option',{name:make.label,exact:true}).click();await expect(page).toHaveURL(new RegExp(`makeId=${make.id}`));
+ const modelInput=page.getByRole('combobox',{name:locale==='ru'?'Модель':'Model',exact:true});
+ await expect(modelInput).toBeEnabled();await modelInput.click();await expect(list.getByRole('option')).toHaveCount(count);
+ await modelInput.press('End');
+ await expect(list.locator('.option-active')).toHaveText(model.label);
+ expect(await list.evaluate(node=>node.scrollTop)).toBeGreaterThan(0);
+ await modelInput.press('Home');await expect(list.locator('.option-active')).toHaveText(models[0].label);
+ await modelInput.press('End');await modelInput.press('Enter');await expect(page).toHaveURL(/modelId=car%3Afixture-model-124/);
+ const variantInput=page.getByRole('combobox',{name:locale==='ru'?'Модификация / двигатель':'Variant / engine',exact:true});
+ await expect(variantInput).toBeEnabled();await variantInput.click();await expect(list.getByRole('option')).toHaveCount(count);
+ await variantInput.press('End');await variantInput.press('Enter');await expect(page).toHaveURL(/variantId=car%3Afixture-variant-124/);
+ const groupInput=page.getByRole('combobox',{name:locale==='ru'?'Тип запчастей':'Parts type',exact:true});
+ await expect(groupInput).toBeEnabled();await groupInput.click();await expect(list.getByRole('option')).toHaveCount(count);
+ await groupInput.press('End');await groupInput.press('Enter');await expect(page).toHaveURL(/categoryId=fixture-category-124/);
+ await makeInput.fill('Make 12');await expect(list.getByRole('option')).toHaveCount(5);
+ await makeInput.press('Escape');await expect(list).toHaveCount(0);await expect(makeInput).toHaveValue(make.label);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

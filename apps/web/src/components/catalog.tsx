@@ -36,7 +36,7 @@ export default function Catalog(){
  function variantLabel(v:Selection['variants'][number]){return t('variantLabel',{name:v.label,power:v.powerKw===null?t('unknownPower'):new Intl.NumberFormat(locale).format(v.powerKw),from:date(v.productionFrom),to:date(v.productionTo),engine:v.engineCode||t('unknownEngine')});}
  const path:Categories=[];let current=category;const visited=new Set<string>();while(current&&!visited.has(current.id)){visited.add(current.id);path.unshift(current);current=categories.find(c=>c.id===current?.parentId);}
  const levels=[{parentId:null as string|null,value:path[0]?.id||''},...path.map((c,i)=>({parentId:c.id,value:path[i+1]?.id||''}))].filter(l=>categories.some(c=>c.parentId===l.parentId));
- const fieldProps={placeholder:t('choose'),refine:t('refine')};
+ const fieldProps={placeholder:t('choose')};
  return <div className="catalog-grid"><section className="glass panel" aria-labelledby="catalog-title"><div className="section-heading"><span className="section-number" aria-hidden="true">01</span><h2 id="catalog-title">{t('catalog')}</h2></div>
   <div className="part-search"><label htmlFor="part-search">{t('partSearch')}</label><input id="part-search" placeholder={t('searchPlaceholder')} disabled aria-describedby="search-note"/><p id="search-note" className="field-hint">{t('searchUnavailable')}</p></div>
   <h3 className="block-title">{t('vehicleSelection')}</h3><div className="kind-switch" role="group" aria-label={t('vehicleKind')}><button aria-pressed={kind==='car'} onClick={()=>change('kind','car')}>{t('car')}</button><button aria-pressed={kind==='motorcycle'} onClick={()=>change('kind','motorcycle')}>{t('motorcycle')}</button></div>
