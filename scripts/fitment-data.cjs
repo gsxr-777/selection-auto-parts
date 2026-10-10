@@ -14,6 +14,7 @@ const rowSchema=z.discriminatedUnion('entity',[
 ]);
 function loadFitments(directory,{retainFitments=true}={}){
  const planText=fs.readFileSync(path.join(directory,'plan.json'),'utf8'),plan=planSchema.parse(JSON.parse(planText));
+ if(plan.scope==='existing-parts'&&plan.parts.some(part=>part.variantIds!==null))throw new Error('Full fitment plan must not restrict article targets');
  const manifest=manifestSchema.parse(JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8')));
  if(hash(planText)!==manifest.planHash||manifest.scope!==plan.scope)throw new Error('Fitment plan/manifest mismatch');
  const completePath=path.join(directory,'export.complete.json');if(!fs.existsSync(completePath))throw new Error('Fitment export is incomplete');

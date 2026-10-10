@@ -256,6 +256,11 @@ For each phase:
 - Validate vehicle hierarchy, OE references, cross-reference relations, and fitment integrity.
 - Do not import the full catalog until sample validation succeeds.
 
+### Full reverse-fitment pass authorized on 2026-10-10
+- The owner explicitly requested every confirmed direct vehicle relationship for the 11,305 previously imported Focus parts, with no new parts. Use the existing-parts plan restricted to parts already linked to `car:18953`; retain exact linkage conditions and RU/EN source context.
+- The full run is in progress, not a completed delivery. Artifacts and resumable checkpoints are ignored under `.cache/catalog-fitment-export`; the prior completed sample is archived under `.cache/catalog-fitment-sample-20261010`.
+- `scripts/run-fitment-job.cjs` waits for complete source export, validates it, imports local then production, and runs catalog/live checks. `node scripts/run-fitment-job.cjs --status` reports the actual stage. Part, OE, replacement and vehicle inventories must remain unchanged; failures stop the job and remain recorded in `job-status.json` / `job.log`.
+
 ### Phase 3 — Vehicle selector and source-backed favorites
 - First card: disabled name/part-number search with localized explanation, vehicle kind, searchable make/model, fuel (including hybrid/electric), body, transmission and precise variant, followed by the source-backed parts hierarchy. Changing a parent clears descendants and results; state is shareable via URL.
 - Second card: selected model, favorite star to its right, then the selected group's parts with original OE references before aftermarket brand/number and explicit replacement relations. Keep saved models reachable from the first card.

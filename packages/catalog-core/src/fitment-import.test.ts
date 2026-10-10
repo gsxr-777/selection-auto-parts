@@ -67,3 +67,19 @@ it('requires explicit sample scope at the common importer entry point',()=>{
  const accepted=spawnSync(process.execPath,[importer,'--fitments','--directory',directory,'--sample','--validate'],{cwd:workspace,encoding:'utf8'});
  expect(accepted.status).toBe(0);expect(accepted.stdout).toContain("scope: 'sample'");
 });
+it('rejects a restricted article plan presented as a full export',()=>{
+ const plan=JSON.parse(fs.readFileSync(path.join(directory,'plan.json'),'utf8'));
+ plan.scope='existing-parts';plan.parts[0].variantIds=['car:1'];writeJson('plan.json',plan);
+ expect(()=>loadFitments(directory)).toThrow('Full fitment plan must not restrict article targets');
+});
+it('accepts complete unrestricted fitment scope without a sample flag',()=>{
+ const plan=JSON.parse(fs.readFileSync(path.join(directory,'plan.json'),'utf8'));plan.scope='existing-parts';writeJson('plan.json',plan);
+ const planHash=hash(JSON.stringify(plan));
+ const manifest=JSON.parse(fs.readFileSync(path.join(directory,'manifest.json'),'utf8'));manifest.scope=plan.scope;manifest.planHash=planHash;writeJson('manifest.json',manifest);
+ writeJson('export.complete.json',{planHash,files:[filename('en'),filename('ru')]});
+ expect(loadFitments(directory).counts.fitments).toBe(2);
+ const accepted=spawnSync(process.execPath,[path.join(workspace,'scripts/import-catalog.cjs'),'--fitments','--directory',directory,'--validate'],{cwd:workspace,encoding:'utf8'});
+ expect(accepted.status).toBe(0);expect(accepted.stdout).toContain("scope: 'existing-parts'");
+ const rejected=spawnSync(process.execPath,[path.join(workspace,'scripts/import-catalog.cjs'),'--fitments','--directory',directory,'--sample','--validate'],{cwd:workspace,encoding:'utf8'});
+ expect(rejected.status).toBe(1);expect(rejected.stderr).toContain('Specify --sample');
+});

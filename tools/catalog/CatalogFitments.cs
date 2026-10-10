@@ -19,14 +19,20 @@ partial class CatalogExport {
  }
  // Categories are resolved against the target vehicle's own tree and source product/supplier pair.
  // Aggregated parent products must not create extra direct category assignments.
- static void FitmentNodes(object tree,object baseTree,IEnumerable nodes,string parent,string pair,List<object> ancestors,List<object> categories,List<string> direct){
+ static bool FitmentContains(object tree,object node,string product,string supplier,Dictionary<object,bool> cache){
+  bool contains;if(cache.TryGetValue(node,out contains))return contains;
+  contains=false;
+  foreach(var pair in Items(Call(tree,"GetProductDatasuppliers",node)))if(Text(Get(pair,"Product"),"ID")==product&&Text(Get(pair,"Supplier"),"ID")==supplier){contains=true;break;}
+  cache[node]=contains;return contains;
+ }
+ static void FitmentNodes(object tree,object baseTree,IEnumerable nodes,string parent,string product,string supplier,Dictionary<object,bool> cache,List<object> ancestors,List<object> categories,List<string> direct){
   foreach(var node in nodes){
-   bool contains=false;foreach(var p in Items(Call(tree,"GetProductDatasuppliers",node)))if(PairId(p)==pair){contains=true;break;}if(!contains)continue;
+   if(!FitmentContains(tree,node,product,supplier,cache))continue;
    string id=Text(baseTree,"ID")+":"+Text(node,"ID");var row=Row("entity","category","id",id,"sourceId",Text(node,"ID"),"parentId",parent,"label",Text(node,"Description"));
    var path=new List<object>(ancestors);path.Add(row);bool covered=false;
-   foreach(var child in Items(Get(node,"Nodes")))foreach(var p in Items(Call(tree,"GetProductDatasuppliers",child)))if(PairId(p)==pair){covered=true;break;}
+   foreach(var child in Items(Get(node,"Nodes")))if(FitmentContains(tree,child,product,supplier,cache)){covered=true;break;}
    if(!covered){direct.Add(id);foreach(var category in path)categories.Add(category);}
-   FitmentNodes(tree,baseTree,Items(Get(node,"Nodes")),id,pair,path,categories,direct);
+   FitmentNodes(tree,baseTree,Items(Get(node,"Nodes")),id,product,supplier,cache,path,categories,direct);
   }
  }
  static void ExportFitments(Assembly types,Assembly dal,object config,object master,object links,StreamWriter log){
@@ -64,7 +70,7 @@ partial class CatalogExport {
        if(Text(Get(linked,"Supplier"),"ID")!=brandId||Text(linked,"DataSupplierArticleNumber")!=number||Text(Get(linked,"CurrentLinkitem"),"ID")!=Text(vehicle,"ID"))throw new Exception("Unexpected reverse article identity "+partId+" "+id);
        string product=Text(Get(linked,"CurrentProduct"),"ID"),sequence=Text(linked,"SequenceID");if(product==""||sequence=="")throw new Exception("Missing source linkage identity");
        var categories=new List<object>();var direct=new List<string>();
-       foreach(var baseTree in Items(Call(tree,"GetSearchTree",Enum.Parse(types.GetType("TMDVD.DataType.Interface.ESearchTreeType"),kind),vehicle)))FitmentNodes(tree,baseTree,Items(Get(baseTree,"Nodes")),null,product+":"+brandId,new List<object>(),categories,direct);
+       foreach(var baseTree in Items(Call(tree,"GetSearchTree",Enum.Parse(types.GetType("TMDVD.DataType.Interface.ESearchTreeType"),kind),vehicle)))FitmentNodes(tree,baseTree,Items(Get(baseTree,"Nodes")),null,product,brandId,new Dictionary<object,bool>(),new List<object>(),categories,direct);
        if(direct.Count==0)throw new Exception("No target source category for "+partId+" "+id+" "+product);
        foreach(var category in categories){var row=(Dictionary<string,object>)category;if(written.Add(Convert.ToString(row["id"])))Write(writer,row);}
        foreach(string categoryId in new HashSet<string>(direct)){Write(writer,Row("entity","fitment","partId",partId,"variantId",id,"categoryId",categoryId,"productId",product,"sequenceId",sequence,"foundVia","CurrentArticle","label",Text(linked,"NormalizedDescription"),"attributes",Attributes(linked),"conditions",Conditions(linked)));count++;}
@@ -73,7 +79,7 @@ partial class CatalogExport {
      }
     }
     if(File.Exists(file))File.Delete(file);File.Move(file+".tmp",file);File.WriteAllText(file+".complete",new FileInfo(file).Length.ToString(CultureInfo.InvariantCulture));
-    if(work>=100||System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64>900L*1048576)throw new ContinueExport();
+    if(work>=2000||System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64>900L*1048576)throw new ContinueExport();
    }
    File.WriteAllText(partComplete,json.Serialize(Row("partId",partId,"locale",locale,"files",partFiles,"directTargets",ids.Count,"parentExcluded",parentLinks,"unsupported",unsupported,"outside",outside,"sampleExcluded",sampleExcluded)));
   }}

@@ -7,7 +7,7 @@ async function run(){
  const env=dotenv.parse(fs.readFileSync('.env')),client=new Client({connectionString:env.DATABASE_URL_UNPOOLED||env.DATABASE_URL});
  try{
   await client.connect();
-  const parts=(await client.query('SELECT id,"brandId",number FROM parts ORDER BY id')).rows;
+  const parts=(await client.query('SELECT p.id,p."brandId",p.number FROM parts p WHERE EXISTS (SELECT 1 FROM part_fitments f WHERE f."partId"=p.id AND f."variantId"=$1) ORDER BY p.id',['car:18953'])).rows;
   const variants=(await client.query('SELECT v.id,m."makeId" FROM vehicle_variants v JOIN vehicle_models m ON m.id=v."modelId" ORDER BY v.id')).rows;
   const selected=sample?parts.filter(p=>['101:06910','138:32 12 09'].includes(p.id)):parts;
   if(!selected.length||(sample&&selected.length!==2))throw new Error('Source-backed parts for the requested scope are missing');
