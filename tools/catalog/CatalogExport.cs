@@ -7,7 +7,7 @@ using System.Globalization;
 using System.Web.Script.Serialization;
 
 // Runs inside the already licensed desktop catalog session. No vendor binaries are modified.
-class CatalogExport {
+partial class CatalogExport {
  static string program=@"C:\Program Files\TecAlliance\Catalogue\Program";
  static string output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-export";
  static JavaScriptSerializer json=new JavaScriptSerializer {MaxJsonLength=Int32.MaxValue};
@@ -66,6 +66,31 @@ class CatalogExport {
   log.WriteLine("treeMs="+watch.ElapsedMilliseconds);watch.Restart();var legacyList=Generic(linkage,"GetArticleList",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),focus,node,Call(tree,"GetProductDatasuppliers",node));log.WriteLine("legacyListMs="+watch.ElapsedMilliseconds+" count="+((IList)legacyList).Count);foreach(var a in Items(legacyList)){log.WriteLine("LEGACY_TYPE "+a.GetType()+" currentVehicle="+Text(Get(a,"CurrentLinkitem"),"ID"));break;}watch.Restart();var result=Generic(linkage,"GetArticleListV2",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),focus,node,Call(tree,"GetProductDatasuppliers",node),false);log.WriteLine("listMs="+watch.ElapsedMilliseconds+" count="+((IList)Get(result,"Articles")).Count);
   foreach(var method in linkage.GetType().GetMethods())if(method.Name.Contains("ArticleList")||method.Name.Contains("LinkageDetails")){log.WriteLine("METHOD "+method);foreach(var parameter in method.GetParameters())log.WriteLine("PARAM "+parameter.Name+" "+parameter.ParameterType);}
   int count=0;foreach(var article in Items(Get(result,"Articles"))){if(count==0){log.WriteLine("ARTICLE_TYPE "+article.GetType());foreach(var property in article.GetType().GetProperties())log.WriteLine("PROPERTY "+property.Name+" "+property.PropertyType);foreach(var method in article.GetType().GetMethods())if(!method.IsSpecialName)log.WriteLine("ARTICLE_METHOD "+method);}watch.Restart();var oe=Call(articles,"GetArticleOENumbers",article);log.WriteLine("oeMs="+watch.ElapsedMilliseconds);watch.Restart();Get(article,"ReplaceNumbers");Get(article,"NewNumbers");log.WriteLine("crossMs="+watch.ElapsedMilliseconds);watch.Restart();var details=Generic(linkage,"GetLinkageDetailsV1",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),article,focus,Get(article,"CurrentProduct"));log.WriteLine("detailMs="+watch.ElapsedMilliseconds);watch.Restart();Attributes(article);log.WriteLine("attrMs="+watch.ElapsedMilliseconds);if(++count==1)break;}
+ }
+ static void FitmentProbe(Assembly types,Assembly dal,object config,object master,object links,StreamWriter log){
+  Locale(master,"en");var suppliers=Create(dal,"SupplierData",config);AssertInit(suppliers,master);var articles=Create(dal,"ArticleData",config);AssertInit(articles,master,suppliers,links);var tree=Create(dal,"SearchTreeData",config);var linkage=Create(dal,"LinkageData",config);AssertInit(tree,master,suppliers,linkage);AssertInit(linkage,master,suppliers,tree,links,articles);
+  foreach(string id in new string[]{"101:06910","138:32 12 09"}){
+   string[] key=id.Split(new char[]{':'},2);var watch=System.Diagnostics.Stopwatch.StartNew();object article=null;
+   foreach(var candidate in Items(Call(articles,"SearchArticle",key[1],Enum.Parse(types.GetType("TMDVD.DataType.Interface.EArticleDirect"),"ArticleNumber"),(UInt32)10000,Enum.Parse(types.GetType("TMDVD.DataType.Interface.EArticleDirectOrder"),"Default"))))if(Text(Get(candidate,"Supplier"),"ID")==key[0]&&Text(candidate,"DataSupplierArticleNumber")==key[1]){article=candidate;break;}
+   if(article==null)throw new Exception("Article not found "+id);log.WriteLine("ARTICLE "+id+" searchMs="+watch.ElapsedMilliseconds+" attributes="+json.Serialize(Attributes(article)));watch.Restart();
+   var targets=(IDictionary)Call(articles,"GetLinkedItemsV2",article);log.WriteLine("LINKS ms="+watch.ElapsedMilliseconds);int samples=0;
+   using(var writer=new StreamWriter(Path.Combine(output,"targets-"+key[0]+".jsonl"))){foreach(DictionaryEntry group in targets){log.WriteLine("GROUP "+group.Key+" count="+((IList)group.Value).Count);foreach(var reverse in Items(group.Value)){
+    var vehicle=Get(reverse,"Linkitem");Write(writer,Row("area",group.Key.ToString(),"id",Text(vehicle,"ID"),"via",Text(reverse,"FoundVia"),"label",Text(vehicle,"Description"),"model",Text(Get(vehicle,"Model"),"Description"),"manufacturer",Text(Get(vehicle,"Manufacturer"),"Description")));
+    if(group.Key.ToString()!="PassengerCar"||Text(reverse,"FoundVia")!="CurrentArticle"||samples>=3)continue;samples++;watch.Restart();var result=Generic(linkage,"GetReverseArticleV2",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),article,vehicle,Get(reverse,"FoundVia"));
+    log.WriteLine("REVERSE "+Text(vehicle,"ID")+" "+Text(vehicle,"Description")+" ms="+watch.ElapsedMilliseconds+" count="+((IList)Get(result,"Articles")).Count);foreach(var linked in Items(Get(result,"Articles")))log.WriteLine("DETAIL "+Text(linked,"DataSupplierArticleNumber")+" vehicle="+Text(Get(linked,"CurrentLinkitem"),"ID")+" product="+Text(Get(linked,"CurrentProduct"),"ID")+" sequence="+Text(linked,"SequenceID")+" general="+json.Serialize(AttributesFrom(Get(linked,"GeneralLinkageAttributes")))+" blocks="+json.Serialize(Get(linked,"LinkageBlocks")==null?new List<object>():Blocks(linked)));
+   }}}
+  }
+ }
+ static List<object> AttributesFrom(object value){var rows=new List<object>();foreach(var a in Items(value))rows.Add(Row("id",Text(a,"ID"),"title",Text(a,"DisplayTitle"),"value",Text(a,"DisplayValue")));return rows;}
+ static List<object> Blocks(object value){var rows=new List<object>();foreach(var b in Items(Get(value,"LinkageBlocks")))rows.Add(Attributes(b));return rows;}
+ static void H4Probe(Assembly types,Assembly dal,object config,object master,object links,StreamWriter log){
+  Locale(master,"en");var suppliers=Create(dal,"SupplierData",config);AssertInit(suppliers,master);var articles=Create(dal,"ArticleData",config);AssertInit(articles,master,suppliers,links);object article=null;
+  foreach(var candidate in Items(Call(articles,"SearchArticle","64193",Enum.Parse(types.GetType("TMDVD.DataType.Interface.EArticleDirect"),"ArticleNumber"),(UInt32)10000,Enum.Parse(types.GetType("TMDVD.DataType.Interface.EArticleDirectOrder"),"Default"))))if(Text(Get(candidate,"Supplier"),"Description")=="OSRAM"&&Text(candidate,"DataSupplierArticleNumber")=="64193"){article=candidate;break;}
+  if(article==null)throw new Exception("H4 example search did not find an exact OSRAM article");
+  bool h4=false;foreach(var attr in Attributes(article)){var row=(Dictionary<string,object>)attr;if(Convert.ToString(row["value"])=="H4")h4=true;}if(!h4)throw new Exception("Source did not identify the example as H4");
+  log.WriteLine("H4_ARTICLE "+Text(Get(article,"Supplier"),"ID")+":"+Text(article,"DataSupplierArticleNumber")+" attributes="+json.Serialize(Attributes(article)));
+  foreach(DictionaryEntry group in (IDictionary)Call(articles,"GetLinkedItemsV2",article)){int direct=0,parent=0;foreach(var reverse in Items(group.Value)){if(Text(reverse,"FoundVia")=="CurrentArticle")direct++;else parent++;}log.WriteLine("H4_GROUP "+group.Key+" direct="+direct+" parent="+parent);}
+  log.WriteLine("H4_PROBE_COMPLETE");
  }
  static void Parts(Assembly types,Assembly dal,object config,object master,object links,StreamWriter log){
   var focus=Generic(links,"SearchTypeByTecdocID",types.GetType("TMDVD.DataType.Interface.IPassengerCar"),(UInt32)18953);
@@ -151,6 +176,10 @@ class CatalogExport {
  static int Main(string[] args){
   if(args.Length>0&&args[0]=="--benchmark")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-benchmark";
   if(args.Length>0&&args[0]=="--metadata")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-metadata";
+  if(args.Length>0&&args[0]=="--fitment-metadata")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-fitment-metadata";
+  if(args.Length>0&&args[0]=="--fitment-probe")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-fitment-probe";
+  if(args.Length>0&&args[0]=="--fitments")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-fitment-export";
+  if(args.Length>0&&args[0]=="--fitment-h4-probe")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-fitment-h4-probe";
   if(args.Length>0&&args[0]=="--coverage")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-coverage";
   if(args.Length>0&&args[0]=="--parent-parts"){parentsOnly=true;output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-parent-export";}
   if(args.Length>0&&args[0]=="--reference-manufacturers")output=@"\\VBOXSVR\1\777\laravel\selection-auto-parts\.cache\catalog-reference-export";
@@ -161,6 +190,11 @@ class CatalogExport {
   Environment.CurrentDirectory=program;
   using(var log=new StreamWriter(Path.Combine(output,"progress.txt"))){log.AutoFlush=true;try{
    var types=Assembly.LoadFrom(Path.Combine(program,"TMDVD.DataType.dll"));var dal=Assembly.LoadFrom(Path.Combine(program,"TMDVD.DAL.BDF.dll"));
+   if(args.Length>0&&args[0]=="--fitment-metadata"){
+    foreach(string name in new string[]{"EReverseLinkitem","ESearchTreeType","EArticleDirect","EArticleDirectOrder"}){var t=types.GetType("TMDVD.DataType.Interface."+name);log.WriteLine("ENUM "+name+" "+String.Join(",",Enum.GetNames(t)));}
+    foreach(string name in new string[]{"ArticleData","LinkageData","SearchTreeData"}){var t=dal.GetType("TMDVD.DAL.BDF."+name);log.WriteLine("TYPE "+t);foreach(var m in t.GetMethods())if(!m.IsSpecialName){log.WriteLine("METHOD "+m);foreach(var p in m.GetParameters())log.WriteLine("PARAM "+p.Name+" "+p.ParameterType);}}
+    return 0;
+   }
    if(args.Length>0&&args[0]=="--metadata"){
     foreach(var type in dal.GetExportedTypes())if(type.Name.Contains("Article")||type.Name.Contains("Linkage")){log.WriteLine("TYPE "+type.FullName);foreach(var p in type.GetProperties())log.WriteLine("PROPERTY "+p.Name+" "+p.PropertyType);foreach(var m in type.GetMethods())if(m.Name.Contains("ArticleList")||m.Name.Contains("LinkageDetails")){log.WriteLine("METHOD "+m);foreach(var p in m.GetParameters())log.WriteLine("PARAM "+p.Name+" "+p.ParameterType);}}
     return 0;
@@ -179,6 +213,11 @@ class CatalogExport {
     log.WriteLine("REFERENCE_MANUFACTURERS_COMPLETE");return 0;
    }
    if(args.Length>0&&args[0]=="--coverage"){Coverage(types,dal,config,master,links,log);return 0;}
+   if(args.Length>0&&args[0]=="--fitment-probe"){FitmentProbe(types,dal,config,master,links,log);Call(master,"Dispose");return 0;}
+   // Like --parts, this dedicated process exits to release the reader. Dispose()
+   // in reader 1.3.3.0 throws when a resumed export opens no supplier files.
+   if(args.Length>0&&args[0]=="--fitments"){ExportFitments(types,dal,config,master,links,log);return 0;}
+   if(args.Length>0&&args[0]=="--fitment-h4-probe"){H4Probe(types,dal,config,master,links,log);Call(master,"Dispose");return 0;}
    if(args.Length>0&&args[0]=="--benchmark"){Benchmark(types,dal,config,master,links,log);Call(master,"Dispose");return 0;}
    if(args.Length>0&&(args[0]=="--parts"||args[0]=="--parent-parts")){if(Text(Get(master,"CurrentValidityParameter"),"CurrentQuarter")!="2/2018")throw new Exception("Unexpected source release");Parts(types,dal,config,master,links,log);return 0;}
    File.WriteAllText(Path.Combine(output,"manifest.json"),json.Serialize(Row("version",1,"release",Text(Get(master,"CurrentValidityParameter"),"CurrentQuarter"),"country","RUS","locales",new string[]{"en","ru"},"extractedAt",DateTime.UtcNow.ToString("o"))));

@@ -113,4 +113,4 @@ function loadCatalog(directory,sample=false,vehiclesOnly=false,parentSample=fals
  const fileHash=hash(files.map(file=>hash(fs.readFileSync(file))).join('|'));
  return {maps,manifest,fileHash,referenceAudit,counts:Object.fromEntries(Object.entries(maps).map(([key,value])=>[key,value.size]))};
 }
-module.exports={loadCatalog,canonicalAttributes,normalizeNumber,hash};
+module.exports={loadCatalog,canonicalAttributes,normalizeNumber,hash,readRows};

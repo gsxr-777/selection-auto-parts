@@ -4,14 +4,7 @@ const {createRequire}=require('node:module');
 const requireDb=createRequire(path.resolve('packages/db/package.json'));
 const {Client}=requireDb('pg');const dotenv=requireDb('dotenv');
 const {loadCatalog,canonicalAttributes,normalizeNumber,hash}=require('./catalog-data.cjs');
-async function upsert(client,table,rows){
- if(!rows.length)return;
- const columns=Object.keys(rows[0]);const quote=name=>'"'+name+'"';
- for(let offset=0;offset<rows.length;offset+=500){
-  await client.query(`INSERT INTO ${quote(table)} (${columns.map(quote)}) SELECT ${columns.map(quote)} FROM jsonb_populate_recordset(NULL::${quote(table)}, $1::jsonb) ON CONFLICT (id) DO UPDATE SET ${columns.filter(c=>c!=='id').map(c=>`${quote(c)}=EXCLUDED.${quote(c)}`).join(',')} WHERE (${columns.map(c=>`${quote(table)}.${quote(c)}`).join(',')}) IS DISTINCT FROM (${columns.map(c=>`EXCLUDED.${quote(c)}`).join(',')})`, [JSON.stringify(rows.slice(offset,offset+500))]);
- }
- console.log(table,rows.length);
-}
+const {upsert}=require('./catalog-db.cjs');
 async function run(){
  const args=process.argv.slice(2),sample=args.includes('--sample');const envFile=args.includes('--production')?'.env.production.local':'.env';
  const {maps,manifest,fileHash,counts,referenceAudit}=loadCatalog(path.resolve('.cache/catalog-export'),sample,args.includes('--vehicles-only'),args.includes('--parent-sample'));
@@ -39,4 +32,5 @@ async function run(){
   await client.query('COMMIT');console.log('Committed',envFile,batchId,counts);
  }catch(e){await client.query('ROLLBACK');throw e;}finally{await client.end();}
 }
-run().catch(e=>{console.error('Import failed:',e.message.replace(/postgres(?:ql)?:\/\/\S+/g,'[redacted]'));process.exitCode=1;});
+if(process.argv.includes('--fitments'))require('./import-fitments.cjs');
+else run().catch(e=>{console.error('Import failed:',e.message.replace(/postgres(?:ql)?:\/\/\S+/g,'[redacted]'));process.exitCode=1;});

@@ -1,16 +1,20 @@
-param([ValidateSet('parts','parent-parts','vehicles','reference-manufacturers')][string]$Mode='parts')
+param([ValidateSet('parts','parent-parts','vehicles','reference-manufacturers','fitment-metadata','fitment-probe','fitment-h4-probe','fitments')][string]$Mode='parts')
 $ErrorActionPreference='Stop'
 $root='\\VBOXSVR\1\777\laravel\selection-auto-parts'
 $destination='catalog-export'
 $helperName='CatalogExport'
 if($Mode -eq 'parent-parts') { $destination='catalog-parent-export'; $helperName='CatalogParentExport' }
 if($Mode -eq 'reference-manufacturers') { $destination='catalog-reference-export'; $helperName='CatalogReferenceExport' }
+if($Mode -eq 'fitment-metadata') { $destination='catalog-fitment-metadata'; $helperName='CatalogFitmentMetadata' }
+if($Mode -eq 'fitment-probe') { $destination='catalog-fitment-probe'; $helperName='CatalogFitmentProbe' }
+if($Mode -eq 'fitments') { $destination='catalog-fitment-export'; $helperName='CatalogFitments' }
+if($Mode -eq 'fitment-h4-probe') { $destination='catalog-fitment-h4-probe'; $helperName='CatalogH4Probe' }
 $work=Join-Path ($root+'\.cache') $destination
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $compiled=Join-Path ($root+'\.cache') ($helperName+'.exe')
-if(Get-Process -Name ('selection-auto-parts-'+$helperName) -ErrorAction SilentlyContinue) { throw 'This export helper is already running; wait for it to exit before restarting.' }
+if(@(Get-Process | Where-Object { $_.ProcessName -eq ('selection-auto-parts-'+$helperName) }).Count -gt 0) { throw 'This export helper is already running; wait for it to exit before restarting.' }
 $compiler='C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe'
-& $compiler /nologo /r:System.Web.Extensions.dll ('/out:'+$compiled) ($root+'\tools\catalog\CatalogExport.cs') 2>&1 | Out-File ($work+'\compile.txt')
+& $compiler /nologo /r:System.Web.Extensions.dll ('/out:'+$compiled) ($root+'\tools\catalog\CatalogExport.cs') ($root+'\tools\catalog\CatalogFitments.cs') 2>&1 | Out-File ($work+'\compile.txt')
 if ($LASTEXITCODE -eq 0) {
   $exportPath=Join-Path $env:TEMP ('selection-auto-parts-'+$helperName+'.exe')
   Copy-Item -LiteralPath $compiled -Destination $exportPath
