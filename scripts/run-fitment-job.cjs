@@ -1,6 +1,7 @@
 // Long-running, resumable host-side continuation of the owner-authorized fitment import.
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process'),{createRequire}=require('node:module');
 const {isDeepStrictEqual}=require('node:util'),{hash}=require('./catalog-data.cjs');
+const {jobTargets}=require('./fitment-job-targets.cjs');
 const root=path.resolve(__dirname,'..'),directory=path.join(root,'.cache/catalog-fitment-export');
 const statusFile=path.join(directory,'job-status.json'),lockFile=path.join(directory,'job.lock');
 if(process.argv.includes('--status')){console.log(fs.existsSync(statusFile)?fs.readFileSync(statusFile,'utf8'):'No fitment job status');process.exit(0);}
@@ -44,6 +45,11 @@ async function run(){
  }
  locked=true;
  log=fs.createWriteStream(path.join(directory,'job.log'),{flags:'a'});
+ const settingsFile=path.join(directory,'job-settings.json');
+ if(process.argv.includes('--local-only'))fs.writeFileSync(settingsFile,JSON.stringify({version:1,target:'local-only'}));
+ const settings=fs.existsSync(settingsFile)?JSON.parse(fs.readFileSync(settingsFile,'utf8')):{version:1,target:'local-only'};
+ if(settings.version!==1)throw new Error('Unsupported fitment job settings');
+ const {localOnly,imports,checks}=jobTargets(settings.target);
  const planText=fs.readFileSync(path.join(directory,'plan.json'),'utf8'),plan=JSON.parse(planText),planHash=hash(planText);
  if(plan.scope!=='existing-parts'||plan.sourceVariantId!=='car:18953'||plan.parts.some(p=>p.variantIds!==null))throw new Error('The job requires the unrestricted existing-parts Focus plan');
  const planned=identities(plan.parts);
@@ -52,11 +58,12 @@ async function run(){
  if(fs.existsSync(baselineFile)){
   baseline=JSON.parse(fs.readFileSync(baselineFile,'utf8'));if(baseline.planHash!==planHash)throw new Error('Job baseline belongs to a different plan');
  }else{
-  const local=await database('.env'),production=await database('.env.production.local');
-  if(!isDeepStrictEqual(local.parts,planned)||!isDeepStrictEqual(production.parts,planned))throw new Error('Plan differs from the previously imported Focus parts');
+  const local=await database('.env'),production=localOnly?null:await database('.env.production.local');
+  if(!isDeepStrictEqual(local.parts,planned)||(!localOnly&&!isDeepStrictEqual(production.parts,planned)))throw new Error('Plan differs from the previously imported Focus parts');
   baseline={planHash,createdAt:new Date().toISOString(),local,production};fs.writeFileSync(baselineFile,JSON.stringify(baseline));
  }
- stage='exporting';update({planHash,parts:plan.parts.length,startedAt:new Date().toISOString(),baseline:baseline.local.inventory});note('Waiting for the complete EN/RU source export');
+ if(!localOnly&&!baseline.production)throw new Error('Production baseline is missing; inspect before expanding the job target');
+ stage='exporting';update({planHash,target:settings.target,parts:plan.parts.length,startedAt:baseline.createdAt,baseline:baseline.local.inventory,...(localOnly?{production:{status:'skipped',reason:'owner-selected-local-only'}}:{})});note('Waiting for the complete EN/RU source export; target='+settings.target);
  while(!fs.existsSync(path.join(directory,'export.complete.json'))){
   if(hash(fs.readFileSync(path.join(directory,'plan.json'),'utf8'))!==planHash)throw new Error('Export plan changed during the job');
   const exitFile=path.join(directory,'exit.txt');
@@ -67,7 +74,7 @@ async function run(){
  }
  if(JSON.parse(fs.readFileSync(path.join(directory,'export.complete.json'),'utf8')).planHash!==planHash)throw new Error('Completed export belongs to a different plan');
  stage='validating-export';update({});await command(['scripts/import-catalog.cjs','--fitments','--validate']);
- for(const [name,envFile,extra] of [['local','.env',[]],['production','.env.production.local',['--production']]]){
+ for(const [name,envFile,extra] of imports){
   const before=await database(envFile);
   if(!isDeepStrictEqual(before.inventory,baseline[name].inventory)||!isDeepStrictEqual(before.parts,planned))throw new Error(name+' catalog inventory changed since job preparation');
   stage='importing-'+name;update({});await command(['scripts/import-catalog.cjs','--fitments',...extra]);
@@ -75,8 +82,8 @@ async function run(){
   if(!isDeepStrictEqual(after.inventory,baseline[name].inventory)||!isDeepStrictEqual(after.parts,planned))throw new Error(name+' inventory changed during the relationship-only import');
   update({[name]:{inventory:after.inventory,fitmentsBefore:baseline[name].fitments,fitmentsAfter:after.fitments}});
  }
- stage='verifying';update({});await command(['scripts/verify-catalog.cjs','--full']);await command(['scripts/verify-deployment.cjs']);
- if(state.local.fitmentsAfter!==state.production.fitmentsAfter)throw new Error('Local and production fitment counts differ');
- stage='complete';update({completedAt:new Date().toISOString()});note('Complete: local, production and live deployment verified; part/OE/replacement inventory unchanged');
+ stage='verifying';update({});for(const check of checks)await command(check);
+ if(!localOnly&&state.local.fitmentsAfter!==state.production.fitmentsAfter)throw new Error('Local and production fitment counts differ');
+ stage='complete';update({completedAt:new Date().toISOString()});note('Complete: '+settings.target+' verified; part/OE/replacement inventory unchanged');
 }
 run().catch(error=>{stage='failed';if(locked){update({error:redact(error.message)});if(log)note(error.stack);}console.error(redact(error.message));process.exitCode=1;}).finally(()=>{if(locked)fs.unlinkSync(lockFile);if(log)log.end();});
